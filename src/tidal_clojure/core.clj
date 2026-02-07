@@ -35,8 +35,16 @@
                   "\n"))
   (println (str "Wrote " (count rows) " rows to " path)))
 
+(defn sort-albums [albums]
+  (sort-by (juxt #(str/lower-case (or (:artist %) ""))
+                 #(or (:year %) ""))
+           albums))
+
+(defn sort-artists [artists]
+  (sort-by #(str/lower-case (or (:name %) "")) artists))
+
 (defn- print-albums [tokens output-path]
-  (let [albums (api/get-favorite-albums tokens)]
+  (let [albums (sort-albums (api/get-favorite-albums tokens))]
     (if (seq albums)
       (if output-path
         (write-csv output-path
@@ -62,7 +70,7 @@
 
       "artists"
       (if-let [tokens (auth/ensure-valid-tokens)]
-        (let [artists (api/get-favorite-artists tokens)]
+        (let [artists (sort-artists (api/get-favorite-artists tokens))]
           (if (seq artists)
             (if output-path
               (write-csv output-path
