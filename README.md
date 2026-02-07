@@ -62,6 +62,13 @@ lein run artists
 ...
 ```
 
+### Export to CSV
+
+```bash
+lein run favorites --output albums.csv
+lein run artists --output artists.csv
+```
+
 ## Commands
 
 | Command | Description |
@@ -71,6 +78,71 @@ lein run artists
 | `albums` | Alias for `favorites` |
 | `artists` | List your favourite artists |
 | `help` | Show usage |
+
+| Option | Description |
+|--------|-------------|
+| `--output <path>` | Write results to a CSV file instead of printing |
+
+## REPL
+
+Start a REPL:
+
+```bash
+lein repl
+```
+
+### Load namespaces
+
+```clojure
+(require '[tidal-clojure.auth :as auth])
+(require '[tidal-clojure.api :as api])
+(require '[tidal-clojure.config :as config])
+```
+
+### Authenticate
+
+Run the full PKCE auth flow (opens browser):
+
+```clojure
+(auth/pkce-auth-flow!)
+```
+
+### Load existing tokens
+
+If you've already authorized via `lein run auth`:
+
+```clojure
+(def tokens (auth/ensure-valid-tokens))
+;; => {:access_token "..." :user_id 207377275 :country_code "NL" ...}
+```
+
+This loads tokens from `~/.tidal-clojure/tokens.json` and refreshes them automatically if expired.
+
+### Fetch data
+
+```clojure
+;; Favourite albums
+(def albums (api/get-favorite-albums tokens))
+(count albums)
+(first albums)
+;; => {:title "Pale Communion" :artist "Opeth" :year "2014"}
+
+;; Favourite artists
+(def artists (api/get-favorite-artists tokens))
+(count artists)
+(first artists)
+;; => {:name "Opeth"}
+```
+
+### Run tests from REPL
+
+```clojure
+(require '[clojure.test :refer [run-tests]])
+(require 'tidal-clojure.auth-test)
+(require 'tidal-clojure.api-test)
+
+(run-tests 'tidal-clojure.auth-test 'tidal-clojure.api-test)
+```
 
 ## How it works
 
