@@ -70,7 +70,8 @@
                      (map (fn [a]
                             (let [artist-ids  (get-in a [:relationships :artists :data])
                                   artist-names (map #(get artists (:id %) "Unknown") artist-ids)]
-                              {:title  (get-in a [:attributes :title])
+                              {:id     (:id a)
+                               :title  (get-in a [:attributes :title])
                                :artist (if (seq artist-names)
                                          (str/join ", " artist-names)
                                          "Unknown")
@@ -92,7 +93,55 @@
                                    "include"     "artists"})]
       (->> (:included resp)
            (filter #(= "artists" (:type %)))
-           (map (fn [a] {:name (get-in a [:attributes :name])}))))))
+           (map (fn [a] {:name (get-in a [:attributes :name])
+                          :id   (:id a)}))))))
+
+(defn- parse-playlists
+  "Parse JSON:API included array into a list of playlist maps.
+   Extracts owner ID from relationships.owners.data for mine/saved filtering."
+  [included]
+  (->> included
+       (filter #(= "playlists" (:type %)))
+       (map (fn [p]
+              {:id            (:id p)
+               :name          (get-in p [:attributes :name])
+               :numberOfItems (get-in p [:attributes :numberOfItems])
+               :playlistType  (get-in p [:attributes :playlistType])
+               :ownerId       (-> p :relationships :owners :data first :id)}))))
+
+(defn- format-duration
+  "Convert ISO 8601 duration (PT5M11S) or seconds to M:SS format."
+  [dur]
+  (when dur
+    (if (and (string? dur) (str/starts-with? dur "PT"))
+      (let [m (re-find #"(\d+)M" dur)
+            s (re-find #"(\d+)S" dur)
+            mins (if m (Long/parseLong (second m)) 0)
+            secs (if s (Long/parseLong (second s)) 0)]
+        (format "%d:%02d" mins secs))
+      (let [n (if (number? dur) dur (Long/parseLong (str dur)))
+            mins (quot n 60)
+            secs (mod n 60)]
+        (format "%d:%02d" mins secs)))))
+
+(defn- parse-tracks
+  "Parse JSON:API included array into a list of {:title :artist :duration} maps."
+  [included]
+  (let [artists (->> included
+                     (filter #(= "artists" (:type %)))
+                     (reduce (fn [m a] (assoc m (:id a) (get-in a [:attributes :name]))) {}))
+        tracks  (->> included
+                     (filter #(= "tracks" (:type %)))
+                     (map (fn [t]
+                            (let [artist-ids  (get-in t [:relationships :artists :data])
+                                  artist-names (map #(get artists (:id %) "Unknown") artist-ids)]
+                              {:id       (:id t)
+                               :title    (get-in t [:attributes :title])
+                               :artist   (if (seq artist-names)
+                                           (str/join ", " artist-names)
+                                           "Unknown")
+                               :duration (format-duration (get-in t [:attributes :duration]))}))))]
+    tracks))
 
 (defn get-favorite-albums
   "Fetch all favourite albums from Tidal (v2 JSON:API, all pages)."
@@ -106,3 +155,26 @@
                                   {"countryCode" country-code
                                    "include"     "albums,albums.artists"})]
       (parse-albums (:included resp)))))
+
+(defn get-favorite-playlists
+  "Fetch all favourite playlists from Tidal (v2 JSON:API, all pages).
+   Returns a list of maps with :id, :name, :numberOfItems, :playlistType, :ownerId."
+  [tokens]
+  (let [user-id (:user_id tokens)]
+    (when-not user-id
+      (throw (ex-info "No user_id in tokens — please re-authorize with `auth`" {})))
+    (let [resp (api-get-all-pages tokens
+                                  (str "userCollections/" user-id "/relationships/playlists")
+                                  {"include" "playlists,playlists.owners"})]
+      (parse-playlists (:included resp)))))
+
+(defn get-playlist-items
+  "Fetch all tracks from a specific playlist (v2 JSON:API, all pages).
+   Returns a list of maps with :title, :artist, :duration."
+  [tokens playlist-id]
+  (let [country-code (:country_code tokens)
+        resp (api-get-all-pages tokens
+                                (str "playlists/" playlist-id "/relationships/items")
+                                {"include"     "items,items.artists"
+                                 "countryCode" country-code})]
+    (parse-tracks (:included resp))))

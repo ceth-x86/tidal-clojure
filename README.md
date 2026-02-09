@@ -39,7 +39,7 @@ Opens your browser to log in with Tidal. After authorizing, tokens are saved to 
 ### List favourite albums
 
 ```bash
-lein run favorites
+lein run albums
 ```
 
 ```
@@ -62,11 +62,37 @@ lein run artists
 ...
 ```
 
+### List favourite playlists
+
+```bash
+lein run playlists            # all playlists
+lein run playlists mine       # playlists you created
+lein run playlists saved      # playlists by others
+```
+
+```
+1. My Daily Mix (42 items)
+2. Progressive Metal (128 items)
+3. Chill Ambient (35 items)
+...
+```
+
+### Export each playlist's tracks
+
+```bash
+lein run playlists mine --detail                              # to playlists/ dir
+lein run playlists mine --detail --output mydir               # to custom dir
+lein run playlists mine --detail --id <playlist-id>           # single playlist
+```
+
+Creates one CSV per playlist with columns: `id, artist, title, duration`.
+
 ### Export to CSV
 
 ```bash
-lein run favorites --output albums.csv
+lein run albums --output albums.csv
 lein run artists --output artists.csv
+lein run playlists --output playlists.csv
 ```
 
 ## Commands
@@ -74,14 +100,31 @@ lein run artists --output artists.csv
 | Command | Description |
 |---------|-------------|
 | `auth` | Authorize with Tidal (opens browser) |
-| `favorites` | List your favourite albums |
-| `albums` | Alias for `favorites` |
+| `albums` | List your favourite albums |
 | `artists` | List your favourite artists |
+| `playlists` | List all favourite playlists |
+| `playlists mine` | List playlists you created |
+| `playlists saved` | List playlists by others |
 | `help` | Show usage |
 
 | Option | Description |
 |--------|-------------|
-| `--output <path>` | Write results to a CSV file instead of printing |
+| `--output <path>` | Write results to a CSV file (or directory with `--detail`) |
+| `--detail` | With playlists: export each playlist's tracks to a separate file |
+| `--id <id>` | With `--detail`: export only the playlist with this ID |
+
+## Makefile Targets
+
+All targets export to `~/Documents/tidal-music-catalog/`.
+
+```bash
+make albums                                        # albums.csv
+make artists                                       # artists.csv
+make playlists_mine                                # playlists_mine.csv (list only)
+make playlists_mine_detail                         # playlists/ dir (tracks per playlist)
+make playlists_mine_one ID=<playlist-id>           # playlists/ dir (single playlist)
+make playlists_saved                               # saved_playlists.csv
+```
 
 ## REPL
 
@@ -125,13 +168,24 @@ This loads tokens from `~/.tidal-clojure/tokens.json` and refreshes them automat
 (def albums (api/get-favorite-albums tokens))
 (count albums)
 (first albums)
-;; => {:title "Pale Communion" :artist "Opeth" :year "2014"}
+;; => {:id "12345" :title "Pale Communion" :artist "Opeth" :year "2014"}
 
 ;; Favourite artists
 (def artists (api/get-favorite-artists tokens))
 (count artists)
 (first artists)
-;; => {:name "Opeth"}
+;; => {:name "Opeth" :id "67890"}
+
+;; Favourite playlists
+(def playlists (api/get-favorite-playlists tokens))
+(count playlists)
+(first playlists)
+;; => {:id "abc-123" :name "My Mix" :numberOfItems 42 :playlistType "USER" :ownerId "207377275"}
+
+;; Playlist tracks
+(def tracks (api/get-playlist-items tokens "abc-123"))
+(first tracks)
+;; => {:id "111" :title "Sorceress" :artist "Opeth" :duration "5:11"}
 ```
 
 ### Run tests from REPL
